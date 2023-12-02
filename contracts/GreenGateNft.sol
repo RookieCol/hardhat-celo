@@ -17,8 +17,8 @@ contract GreenGate is ERC721A {
         addressMarket = _addressMarket;
     }
 
-    function mint(uint256 quantity, address to ) external  {
-        require(to == msg.sender, "Should call owner");
+   function mint(uint256 quantity, address to ) external  {
+        require(addressMarket == msg.sender, "Should call owner");
         require(totalSupply() + quantity <= maxSupply, "There is not tickets left");
         _mint(to, quantity);
     }
