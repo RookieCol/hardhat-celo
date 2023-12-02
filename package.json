@@ -15,6 +15,7 @@
     "@types/mocha": ">=9.1.0",
     "@types/node": ">=16.0.0",
     "chai": "^4.3.10",
+    "erc721a": "^4.2.3",
     "ethers": "^6.9.0",
     "hardhat": "^2.19.1",
     "hardhat-gas-reporter": "^1.0.9",
