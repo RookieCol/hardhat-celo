@@ -18,7 +18,7 @@ if (!process.env.ETHERSCAN_CELO_API_KEY) {
 
 // Hardhat configuration
 const config: HardhatUserConfig = {
-  solidity: "0.8.19",
+  solidity: "0.8.20",
   networks: {
     alfajores: {
       url: "https://alfajores-forno.celo-testnet.org",
