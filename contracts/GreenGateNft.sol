@@ -23,7 +23,7 @@ contract GreenGate is ERC721A {
         _mint(to, quantity);
     }
 
-    function remainingSupply() external view returns (uint256) {
+    function remainingSupply() public view returns (uint256) {
         return maxSupply - totalSupply();
     }
 }
