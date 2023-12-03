@@ -6,7 +6,7 @@ async function main() {
 
   const lockedAmount = ethers.parseEther("0.001");
 
-  const lock = await ethers.deployContract("CollectionsFactory");
+  const lock = await ethers.deployContract("GreenGateNftMarketplace");
 
   await lock.waitForDeployment();
 

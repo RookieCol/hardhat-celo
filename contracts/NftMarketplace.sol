@@ -9,6 +9,7 @@ error PriceNotMet(address nftAddress, uint256 price);
 error NotListed(address nftAddress);
 error AlreadyListed(address nftAddress);
 error NoBalance();
+error NotAuthorized();
 error PriceMustBeAboveZero();
 error NoTokensRemaining(address nftAddress);
 
@@ -25,17 +26,14 @@ contract GreenGateNftMarketplace is ReentrancyGuard {
 
     modifier notListed(address nftContractAddress) {
         Listing memory listing = listings[nftContractAddress];
-        if (listing.price > 0) {
-            revert AlreadyListed(nftContractAddress);
-        }
+        if (listing.price > 0) revert AlreadyListed(nftContractAddress);
         _;
     }
 
     modifier isListed(address nftContractAddress) {
         Listing memory listing = listings[nftContractAddress];
-        if (listing.price <= 0) {
-            revert NotListed(nftContractAddress);
-        }
+        if (listing.price <= 0) revert NotListed(nftContractAddress);
+
         _;
     }
 
@@ -58,9 +56,7 @@ contract GreenGateNftMarketplace is ReentrancyGuard {
         address nftContractAddress,
         uint256 price
     ) external notListed(nftContractAddress) {
-        if (price <= 0) {
-            revert PriceMustBeAboveZero();
-        }
+        if (price <= 0) revert PriceMustBeAboveZero();
 
         listings[nftContractAddress] = Listing(msg.sender, price);
 
@@ -70,6 +66,9 @@ contract GreenGateNftMarketplace is ReentrancyGuard {
     function cancelListing(
         address nftContractAddress
     ) external isListed(nftContractAddress) {
+        if (listings[nftContractAddress].seller != msg.sender)
+            revert NotAuthorized();
+
         delete (listings[nftContractAddress]);
         emit NFTListingCanceled(msg.sender, nftContractAddress);
     }
@@ -78,9 +77,10 @@ contract GreenGateNftMarketplace is ReentrancyGuard {
         address nftContractAddress,
         uint256 newPrice
     ) external isListed(nftContractAddress) nonReentrant {
-        if (newPrice == 0) {
-            revert PriceMustBeAboveZero();
-        }
+        if (newPrice == 0) revert PriceMustBeAboveZero();
+
+        if (listings[nftContractAddress].seller != msg.sender)
+            revert NotAuthorized();
 
         listings[nftContractAddress].price = newPrice;
         emit NFTListed(nftContractAddress, msg.sender, newPrice);
@@ -95,18 +95,15 @@ contract GreenGateNftMarketplace is ReentrancyGuard {
         IGreenGateNft nft = IGreenGateNft(nftContractAddress);
         uint256 remainingSupply = nft.remainingSupply();
 
-        if (remainingSupply == uint256(0) || quantity > remainingSupply) {
+        if (remainingSupply == uint256(0) || quantity > remainingSupply)
             revert NoTokensRemaining(nftContractAddress);
-        }
 
         (, uint256 requiredPrice) = quantity.tryMul(listedNft.price);
-        (, uint256 amountOfPurchase) = quantity.tryMul(msg.value);
 
-        if (amountOfPurchase != requiredPrice) {
+        if (msg.value != requiredPrice)
             revert PriceNotMet(nftContractAddress, requiredPrice);
-        }
 
-        balances[listedNft.seller] += amountOfPurchase;
+        balances[listedNft.seller] += msg.value;
 
         nft.mint(quantity, msg.sender);
 
@@ -115,27 +112,22 @@ contract GreenGateNftMarketplace is ReentrancyGuard {
 
     function withdrawFunds() external {
         uint256 balance = balances[msg.sender];
-        if (balance <= 0) {
-            revert NoBalance();
-        }
+        if (balance <= 0) revert NoBalance();
 
-        (, uint256 sellerPercentage) = uint256(80).tryDiv(100);
-        (, uint256 amountForSeller) = balance.tryMul(sellerPercentage);
-        (, uint256 amountToStake) = balance.trySub(amountForSeller);
+        uint256 amountForSeller = (balance * 8000) / 10_000;
+        uint256 amountToStake = balance - amountForSeller;
 
         balances[msg.sender] = 0;
 
-        (bool success1, ) = payable(msg.sender).call{value: amountForSeller}(
-            ""
-        );
+        (bool success1, ) = payable(address(msg.sender)).call{
+            value: amountForSeller
+        }("");
         require(success1, "Transfer 1 failed");
 
         // ! IMPORTANT: THIS CODE IS PROVITIONAL
 
-        (bool success2, ) = payable(address(this)).call{value: amountToStake}(
-            ""
-        );
-        require(success2, "Transfer failed");
+        (bool success2, ) = payable(address(0)).call{value: amountToStake}("");
+        require(success2, "Transfer 2 failed");
     }
 
     function getListing(
