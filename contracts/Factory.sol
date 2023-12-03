@@ -8,6 +8,8 @@ contract CollectionsFactory {
 
     mapping(uint256 => address) public seassons;
 
+    event CollectionCreated(address indexed newCollection, uint256 idEvent);
+
     function createEvent(
         string memory name,
         string memory symbol,
@@ -21,6 +23,8 @@ contract CollectionsFactory {
             addressMarkert
         );
         seassons[idEvent] = address(newCollection);
+
+        emit CollectionCreated(address(newCollection), idEvent);
         idEvent++;
         return address(newCollection);
     }
