@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import {IERC721A, ERC721A} from "erc721a/contracts/ERC721A.sol";
+import "./IGreenGateNft.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
@@ -10,8 +10,11 @@ error NotListed(address nftAddress);
 error AlreadyListed(address nftAddress);
 error NoBalance();
 error PriceMustBeAboveZero();
+error NoTokensRemaining(address nftAddress);
 
-contract NFTMarketplace is ReentrancyGuard {
+contract GreenGateNftMarketplace is ReentrancyGuard {
+    using Math for uint256;
+
     struct Listing {
         address seller;
         uint256 price;
@@ -59,10 +62,9 @@ contract NFTMarketplace is ReentrancyGuard {
             revert PriceMustBeAboveZero();
         }
 
-        IERC721A nft = IERC721A(nftContractAddress);
         listings[nftContractAddress] = Listing(msg.sender, price);
 
-        emit NFTListed(nftContractAddress, tokenId, msg.sender, price);
+        emit NFTListed(nftContractAddress, msg.sender, price);
     }
 
     function cancelListing(
@@ -90,15 +92,15 @@ contract NFTMarketplace is ReentrancyGuard {
     ) external payable isListed(nftContractAddress) nonReentrant {
         Listing memory listedNft = listings[nftContractAddress];
 
-        IERC721A nft = IERC721A(nftContractAddress);
+        IGreenGateNft nft = IGreenGateNft(nftContractAddress);
         uint256 remainingSupply = nft.remainingSupply();
 
         if (remainingSupply == uint256(0) || quantity > remainingSupply) {
-            revert NoTokensRemaning(nftContractAddress);
+            revert NoTokensRemaining(nftContractAddress);
         }
 
-        (, uint256 requiredPrice) = uint256(quantity.tryMul(listedNft.price));
-        (, uint256 amountOfPurchase) = uint256(quantity.tryMul(msg.value));
+        (, uint256 requiredPrice) = quantity.tryMul(listedNft.price);
+        (, uint256 amountOfPurchase) = quantity.tryMul(msg.value);
 
         if (amountOfPurchase != requiredPrice) {
             revert PriceNotMet(nftContractAddress, requiredPrice);
@@ -108,7 +110,7 @@ contract NFTMarketplace is ReentrancyGuard {
 
         nft.mint(quantity, msg.sender);
 
-        emit NFTPurchased(nftContractAddress, msg.sender, listedNft.price);
+        emit NFTPurchased(nftContractAddress, msg.sender, requiredPrice);
     }
 
     function withdrawFunds() external {
@@ -117,8 +119,9 @@ contract NFTMarketplace is ReentrancyGuard {
             revert NoBalance();
         }
 
-        (, uint256 amountForSeller) = uint256(balance.tryMul(80 / 100));
-        (, uint256 amountToStake) = uint256(balance.trySub(amountForSeller));
+        (, uint256 sellerPercentage) = uint256(80).tryDiv(100);
+        (, uint256 amountForSeller) = balance.tryMul(sellerPercentage);
+        (, uint256 amountToStake) = balance.trySub(amountForSeller);
 
         balances[msg.sender] = 0;
 
