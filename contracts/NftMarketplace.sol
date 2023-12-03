@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.19;
 
 import {IERC721A, ERC721A} from "erc721a/contracts/ERC721A.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-error PriceNotMet(address nftAddress, uint256 tokenId, uint256 price);
-error ItemNotForSale(address nftAddress, uint256 tokenId);
-error NotListed(address nftAddress, uint256 tokenId);
-error AlreadyListed(address nftAddress, uint256 tokenId);
+error PriceNotMet(address nftAddress, uint256 price);
+// error ItemNotForSale(address nftAddress);
+error NotListed(address nftAddress);
+error AlreadyListed(address nftAddress);
 error NoBalance();
-error NotOwner();
-error NotApprovedForMarketplace();
+// error NotOwner();
+// error NotApprovedForMarketplace();
 error PriceMustBeAboveZero();
 
 contract NFTMarketplace is ReentrancyGuard {
@@ -19,133 +19,101 @@ contract NFTMarketplace is ReentrancyGuard {
         uint256 price;
     }
 
-    mapping(address => mapping(uint256 => Listing)) private listings;
+    mapping(address => Listing) private listings;
     mapping(address => uint256) private balances;
 
-    modifier notListed(
-        address nftContractAddress,
-        uint256 tokenId,
-        address owner
-    ) {
-        Listing memory listing = listings[nftContractAddress][tokenId];
+    modifier notListed(address nftContractAddress) {
+        Listing memory listing = listings[nftContractAddress];
         if (listing.price > 0) {
-            revert AlreadyListed(nftContractAddress, tokenId);
+            revert AlreadyListed(nftContractAddress);
         }
         _;
     }
 
-    modifier isListed(address nftContractAddress, uint256 tokenId) {
-        Listing memory listing = listings[nftContractAddress][tokenId];
+    modifier isListed(address nftContractAddress) {
+        Listing memory listing = listings[nftContractAddress];
         if (listing.price <= 0) {
-            revert NotListed(nftContractAddress, tokenId);
-        }
-        _;
-    }
-
-    modifier isOwner(
-        address nftContractAddress,
-        uint256 tokenId,
-        address spender
-    ) {
-        IERC721A nft = IERC721A(nftContractAddress);
-        address owner = nft.ownerOf(tokenId);
-        if (spender != owner) {
-            revert NotOwner();
+            revert NotListed(nftContractAddress);
         }
         _;
     }
 
     event NFTListed(
         address indexed nftContract,
-        uint256 indexed tokenId,
         address indexed seller,
         uint256 price
     );
     event NFTListingCanceled(
         address indexed seller,
-        address indexed nftAddress,
-        uint256 tokenId
+        address indexed nftAddress
     );
     event NFTPurchased(
         address indexed nftContract,
-        uint256 indexed tokenId,
         address indexed buyer,
         uint256 price
     );
 
     function listNFT(
         address nftContractAddress,
-        uint256 tokenId,
         uint256 price
-    )
-        external
-        notListed(nftContractAddress, tokenId, msg.sender)
-        isOwner(nftContractAddress, tokenId, msg.sender)
-    {
+    ) external notListed(nftContractAddress) {
         if (price <= 0) {
             revert PriceMustBeAboveZero();
         }
 
         IERC721A nft = IERC721A(nftContractAddress);
-        if (nft.getApproved(tokenId) != address(this)) {
-            revert NotApprovedForMarketplace();
-        }
-        listings[nftContractAddress][tokenId] = Listing(msg.sender, price);
+        listings[nftContractAddress] = Listing(msg.sender, price);
+
         emit NFTListed(nftContractAddress, tokenId, msg.sender, price);
     }
 
     function cancelListing(
-        address nftContractAddress,
-        uint256 tokenId
-    )
-        external
-        isOwner(nftContractAddress, tokenId, msg.sender)
-        isListed(nftContractAddress, tokenId)
-    {
-        delete (listings[nftContractAddress][tokenId]);
-        emit NFTListingCanceled(msg.sender, nftContractAddress, tokenId);
+        address nftContractAddress
+    ) external isListed(nftContractAddress) {
+        delete (listings[nftContractAddress]);
+        emit NFTListingCanceled(msg.sender, nftContractAddress);
     }
 
     function updateListing(
         address nftContractAddress,
-        uint256 tokenId,
         uint256 newPrice
-    )
-        external
-        isListed(nftContractAddress, tokenId)
-        nonReentrant
-        isOwner(nftContractAddress, tokenId, msg.sender)
-    {
+    ) external isListed(nftContractAddress) nonReentrant {
         if (newPrice == 0) {
             revert PriceMustBeAboveZero();
         }
 
-        listings[nftContractAddress][tokenId].price = newPrice;
-        emit NFTListed(msg.sender, nftContractAddress, tokenId, newPrice);
+        listings[nftContractAddress].price = newPrice;
+        emit NFTListed(nftContractAddress, msg.sender, newPrice);
     }
 
     function purchaseNft(
         address nftContractAddress,
-        uint256 tokenId
-    ) external payable isListed(nftContractAddress, tokenId) nonReentrant {
-        Listing memory listedNft = listings[nftContractAddress][tokenId];
+        uint256 quantity
+    ) external payable isListed(nftContractAddress) nonReentrant {
+        Listing memory listedNft = listings[nftContractAddress];
+
+        IERC721A nft = IERC721A(nftContractAddress);
+        uint256 remainingSupply = nft.remainingSupply();
+
+        if (remainingSupply == uint256(0)) {
+            revert NoTokensRemaning(nfContractAddress);
+        }
+
+        if (quantity > remainingSupply) {
+            revert NoTokensRemaining(nfContractAddress);
+        }
+
+        uint256 amountOfPurchase = uint256();
+
         if (msg.value < listedNft.price) {
-            revert PriceNotMet(nftContractAddress, tokenId, listedNft.price);
+            revert PriceNotMet(nftContractAddress, listedNft.price);
         }
 
         balances[listedNft.seller] += msg.value;
-        delete (listings[nftContractAddress][tokenId]);
-        IERC721A(nftContractAddress).safeTransferFrom(
-            listedNft.seller,
-            msg.sender,
-            tokenId
-        );
-        emit NFTPurchased(
-            nftContractAddress,
-            tokenId,
-            msg.sender,
-            listedNft.price
-        );
+
+        nft.mint(quantity, msg.sender);
+
+        emit NFTPurchased(nftContractAddress, msg.sender, listedNft.price);
     }
 
     function withdrawFunds() external {
@@ -161,10 +129,16 @@ contract NFTMarketplace is ReentrancyGuard {
     }
 
     function getListing(
-        address nftContractAddress,
-        uint256 tokenId
-    ) external view returns (Listing memory) {
-        return listings[nftContractAddress][tokenId];
+        address nftContractAddress
+    )
+        external
+        view
+        returns (
+            // uint256 tokenId
+            Listing memory
+        )
+    {
+        return listings[nftContractAddress];
     }
 
     function getBalances(address seller) external view returns (uint256) {
