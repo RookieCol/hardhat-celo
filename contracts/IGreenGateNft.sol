@@ -7,4 +7,6 @@ interface IGreenGateNft {
     function totalSupply() external view returns (uint256);
 
     function remainingSupply() external view returns (uint256);
+
+    function getBeneficiary() external view returns (address);
 }

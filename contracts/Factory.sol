@@ -14,12 +14,14 @@ contract CollectionsFactory {
         string memory name,
         string memory symbol,
         uint8 maxTickets,
+        address beneficiary,
         address addressMarkert
     ) public returns (address) {
         GreenGate newCollection = new GreenGate(
             name,
             symbol,
             maxTickets,
+            beneficiary,
             addressMarkert
         );
         seassons[idEvent] = address(newCollection);

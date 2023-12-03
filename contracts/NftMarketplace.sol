@@ -17,7 +17,9 @@ contract GreenGateNftMarketplace is ReentrancyGuard {
     using Math for uint256;
 
     struct Listing {
+        address nftContractAddress;
         address seller;
+        address beneficiary;
         uint256 price;
     }
 
@@ -57,8 +59,15 @@ contract GreenGateNftMarketplace is ReentrancyGuard {
         uint256 price
     ) external notListed(nftContractAddress) {
         if (price <= 0) revert PriceMustBeAboveZero();
+        IGreenGateNft nft = IGreenGateNft(nftContractAddress);
+        address beneficiary = nft.getBeneficiary();
 
-        listings[nftContractAddress] = Listing(msg.sender, price);
+        listings[nftContractAddress] = Listing(
+            nftContractAddress,
+            msg.sender,
+            beneficiary,
+            price
+        );
 
         emit NFTListed(nftContractAddress, msg.sender, price);
     }
@@ -110,12 +119,12 @@ contract GreenGateNftMarketplace is ReentrancyGuard {
         emit NFTPurchased(nftContractAddress, msg.sender, requiredPrice);
     }
 
-    function withdrawFunds() external {
+    function withdrawFunds(address _nftContractAddress) external {
         uint256 balance = balances[msg.sender];
         if (balance <= 0) revert NoBalance();
 
         uint256 amountForSeller = (balance * 8000) / 10_000;
-        uint256 amountToStake = balance - amountForSeller;
+        uint256 amountToShare = balance - amountForSeller;
 
         balances[msg.sender] = 0;
 
@@ -124,9 +133,10 @@ contract GreenGateNftMarketplace is ReentrancyGuard {
         }("");
         require(success1, "Transfer 1 failed");
 
-        // ! IMPORTANT: THIS CODE IS PROVITIONAL
+        IGreenGateNft nft = IGreenGateNft(_nftContractAddress);
+        address beneficiary = nft.getBeneficiary();
 
-        (bool success2, ) = payable(address(0)).call{value: amountToStake}("");
+        (bool success2, ) = payable(beneficiary).call{value: amountToShare}("");
         require(success2, "Transfer 2 failed");
     }
 
