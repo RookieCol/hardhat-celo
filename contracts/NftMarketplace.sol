@@ -3,14 +3,12 @@ pragma solidity ^0.8.19;
 
 import {IERC721A, ERC721A} from "erc721a/contracts/ERC721A.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 
 error PriceNotMet(address nftAddress, uint256 price);
-// error ItemNotForSale(address nftAddress);
 error NotListed(address nftAddress);
 error AlreadyListed(address nftAddress);
 error NoBalance();
-// error NotOwner();
-// error NotApprovedForMarketplace();
 error PriceMustBeAboveZero();
 
 contract NFTMarketplace is ReentrancyGuard {
@@ -95,21 +93,18 @@ contract NFTMarketplace is ReentrancyGuard {
         IERC721A nft = IERC721A(nftContractAddress);
         uint256 remainingSupply = nft.remainingSupply();
 
-        if (remainingSupply == uint256(0)) {
-            revert NoTokensRemaning(nfContractAddress);
+        if (remainingSupply == uint256(0) || quantity > remainingSupply) {
+            revert NoTokensRemaning(nftContractAddress);
         }
 
-        if (quantity > remainingSupply) {
-            revert NoTokensRemaining(nfContractAddress);
+        (, uint256 requiredPrice) = uint256(quantity.tryMul(listedNft.price));
+        (, uint256 amountOfPurchase) = uint256(quantity.tryMul(msg.value));
+
+        if (amountOfPurchase != requiredPrice) {
+            revert PriceNotMet(nftContractAddress, requiredPrice);
         }
 
-        uint256 amountOfPurchase = uint256();
-
-        if (msg.value < listedNft.price) {
-            revert PriceNotMet(nftContractAddress, listedNft.price);
-        }
-
-        balances[listedNft.seller] += msg.value;
+        balances[listedNft.seller] += amountOfPurchase;
 
         nft.mint(quantity, msg.sender);
 
@@ -122,22 +117,27 @@ contract NFTMarketplace is ReentrancyGuard {
             revert NoBalance();
         }
 
+        (, uint256 amountForSeller) = uint256(balance.tryMul(80 / 100));
+        (, uint256 amountToStake) = uint256(balance.trySub(amountForSeller));
+
         balances[msg.sender] = 0;
 
-        (bool success, ) = payable(msg.sender).call{value: balance}("");
-        require(success, "Transfer failed");
+        (bool success1, ) = payable(msg.sender).call{value: amountForSeller}(
+            ""
+        );
+        require(success1, "Transfer 1 failed");
+
+        // ! IMPORTANT: THIS CODE IS PROVITIONAL
+
+        (bool success2, ) = payable(address(this)).call{value: amountToStake}(
+            ""
+        );
+        require(success2, "Transfer failed");
     }
 
     function getListing(
         address nftContractAddress
-    )
-        external
-        view
-        returns (
-            // uint256 tokenId
-            Listing memory
-        )
-    {
+    ) external view returns (Listing memory) {
         return listings[nftContractAddress];
     }
 
